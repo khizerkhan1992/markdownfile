@@ -1,0 +1,192 @@
+---
+title: "learning_objectives"
+author: "muhammad khizer khan"
+date: "12/3/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+With library() we can import packages that we want to use in our system.
+```{r}
+library(ggmap)
+library(tidyverse)
+```
+
+With the read.csv() function, We can read csv files in our program
+As I have files with name IndiaWantsOxygen.csv and worldcities.csv that are saved on different locations (C:/Users/khizer/Documents/GVSU courses/3rd semester/STA518/project/data sets ,  C:/Users/khizer/Documents/GVSU courses/3rd semester/STA518/project/data sets) 
+so with the help of following code I read csv files
+```{r}
+data = read.csv("C:/Users/khizer/Documents/GVSU courses/3rd semester/STA518/project/data sets/IndiaWantsOxygen.csv")
+countries = read.csv("C:/Users/khizer/Documents/GVSU courses/3rd semester/STA518/project/data sets/worldcities.csv")
+```
+
+
+
+##Clean data
+
+We clean data on the basis of our need. For example I want to know the name of the country and city of the user in my data set. We have a column with the name userlocation in which we have one of the following values. 
+1) city or country
+2) city and country
+3) garbage value 
+4) missing values.
+
+we have about 28k data so I am just showing 50 records
+```{r}
+data = as.tibble(data)
+data[1:2,]
+```
+We have some values of countries in country data set that are not in our data set for example we have 
+1) United states not USA
+2) United Kingdom not England
+etc so we need to add these values too
+```{r}
+countries[nrow(countries) + 1, 5] = "England"
+countries[nrow(countries) + 1, 5] = "INDIA"
+countries[nrow(countries) + 1, 5] = "india"
+countries[nrow(countries) + 1, 5] = "USA"
+countries[nrow(countries) + 1, 5] = "england"
+country_list = unique(countries$country)
+```
+
+
+
+
+First I will remove all the data in which we have missing values in userlocation
+```{r}
+data_without_empty_values = filter(data, user_location != '')
+```
+
+
+
+
+As we have following condition of tidy data
+1)Every cell is a value
+2)Every row is an observation
+3)Every column is a variable
+
+As you can see our data is untidy as it met all the conditions except the last one.Userlocation contains both city and country so to make it untidy I have to split this column in to two city and country
+
+```{r}
+data_without_empty_values <- data_without_empty_values %>% separate(user_location, c('City', 'Country'))
+```
+We have one data set of country. There are some garbage values in country column so we will compare the values of country data set and country column. If we have any value in country column which is not in country data set it means it is garbage value so we will remove it and set NA
+
+```{r}
+data_without_empty_values <- data_without_empty_values %>% 
+       mutate(Country = ifelse(match(Country, country_list) > 0, Country, NA))
+data_without_empty_values[1:2,]
+```
+
+
+
+Now we have city data set and we will compare the value of city column to city dataset. If the value is match and country column is NA so we will set the name of the country on the basis of city other wise we will keep the previous name of the country column
+```{r}
+data_without_empty_values <- data_without_empty_values %>% 
+  mutate(Country = ifelse(match(City, countries$city) > 0 & is.na(Country) , countries$country[match(City, countries$city)], Country))
+data_without_empty_values[1:2,]
+```
+We also have some country names in city column so we well compare city values with country names and if we have any so we will save that name in to country
+```{r}
+data_without_empty_values <- data_without_empty_values %>% 
+  mutate(Country = ifelse(match(City, country_list) > 0 & is.na(Country) , countries$country[match(City, countries$country)], Country))
+data_without_empty_values[1:2,]
+```
+
+
+Now we want to calculate the number of occurances of every country in our data set so we get to know the number of people twitte about indianeedsoxygen and we will only select one column country because we dont need data of other variables in our data
+```{r}
+data_without_na_values <- data_without_empty_values %>%
+    select(Country)%>%
+    filter(!is.na(Country))%>%
+  mutate(country_count = 1)
+
+    
+data_without_na_values = data_without_na_values %>%
+ mutate(country_count = ifelse(Country == "USA", country_count * 3, ifelse(Country == "United Arab Emirates", country_count * 3,ifelse(Country == "Australia", country_count * 8,ifelse(Country == "New Zealand", country_count * 15, ifelse(Country == "Canada", country_count * 10, ifelse(Country == "Germany", country_count * 63, country_count)))))))
+
+data_without_na_values <- data_without_na_values %>%
+    group_by(Country) %>%
+    dplyr::summarise(country_count = sum(country_count)) %>%
+    as.data.frame()
+```
+
+
+
+Now we have clean our data and this is the time of making a heat map of world to show on which part of the world people are more talking about indianeedsoxygen
+
+
+Now we have clean our data and this is the time of making a heat map of world to show on which part of the world people are more talking about indianeedsoxygen
+
+```{r}
+world_map = map_data("world")
+ world_map = merge(world_map, data_without_na_values, by.x = "region", by.y = "Country")
+
+# ggplot(world_map, aes(x = long, y = lat, group = group, fill = count_country), fill = "white", color = "#7f7f7f", #size = 0.25)+
+ #     geom_polygon()
+
+
+ggplot(data_without_na_values) +
+  geom_map(
+    dat = world_map, map = world_map, aes(map_id = region),
+    fill = "white", color = "#7f7f7f", size = 0.25
+  ) +
+  geom_map(map = world_map, aes(map_id = Country, fill = country_count), size = 0.25) +
+  scale_fill_gradient(low = "#fff7bc", high = "#cc4c02", name = "Total Cases") +
+  expand_limits(x = world_map$long, y = world_map$lat)
+```
+
+From the above graph we get to know that people are talking about indian covid 19 all over the world but neighbouring countries of india(India, pakistan, afghanistan, bangladesh) are more concern and more discuss this on twitter.
+
+
+
+Now we are reading one more data for summaries and graphical analysis
+```{r}
+testing_details = read.csv("C:/Users/khizer/Documents/GVSU courses/3rd semester/STA518/project/data sets/StatewiseTestingDetails.csv")
+testing_details = as.tibble(testing_details)
+testing_details[1:2,]
+```
+
+In this above data set some values have NA in negative cases variable, some values have NA in positive cases and some values have NA in both positive and negative cases
+so we will do the following steps to transform data in our format.
+1) Remove all the records in which negative and positive both have NA values
+2) if negative is NA so subtract totalSamples with positive cases the answer will be negative cases
+  a)Negative = TotalSamples - Positive
+3) if Positive is NA so subtract totalSamples with negative cases the answer will be positive cases
+  a)Positive = TotalSamples - Negative
+4) add new variable "Percentage_of_positive_cases" 
+
+Now the positive and negative cases are not as explanatory as percentage. With the percentage the help of percentage we have a better idea of number of covid patients in that state
+
+```{r}
+testing_details = testing_details %>%
+    filter(!is.na(Negative) | !is.na(Positive)) %>%
+    mutate(Negative = ifelse(is.na(Negative), TotalSamples - Positive, Negative),
+           Positive = ifelse(is.na(Positive), TotalSamples - Negative, Positive),
+           percentage_of_positive_cases = (Positive/TotalSamples) * 100)
+
+testing_details[1:4,]
+```
+
+
+Now  make some visualizations for better understanding of numbers
+```{r}
+hist(testing_details$percentage_of_positive_cases,breaks = 100, col = "red", main = "covid 19 trend in states of india", xlab =  "percentage of positive cases",  ylab = "frequency")
+```
+With the help of above diagram we have better understanding of percentage of positive cases
+1) The above diagram shows that the frequency of positive cases are much high for 9% or less than 9%
+2) frequency are high of 2 to 3% positve cases.
+3) the chart is right skewed.
+4) From the range of 10 to 25% the max frequency is on 20%. It means that data around 20% are not outliers
+
+Below visualization is also the evidence of the points thats we mentioned above.
+```{r}
+ggplot(testing_details, aes(testing_details$percentage_of_positive_cases)) +
+    geom_density()
+```
+
+
+
+
+
